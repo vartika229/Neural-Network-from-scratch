@@ -1,14 +1,7 @@
-# -*- coding: utf-8 -*-
-# Author: Ahmed BESBES 
-# <ahmed.besbes@hotmail.com>
-#
-
-# matplotlib for plotting
 import matplotlib
 matplotlib.rcParams['figure.figsize'] = (10.0, 10.0)
 from matplotlib import pyplot as plt
 
-# numpy for vector and matrix manipulations
 import numpy as np
 
 # we won't use scikit per se but we'll use some help functions in it
