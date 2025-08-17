@@ -1,0 +1,222 @@
+import numpy as np 
+import matplotlib.pyplot as plt
+import networkx as nx
+
+#network architecture
+n = [4, 8, 8, 3]
+L=len(n)
+
+
+# weights and biases initialization
+def he_initialization(n):
+
+  parameter={}
+
+  for l in range(1,L):
+
+    parameter[f'W{l}']=np.random.randn(n[l], n[l-1])* np.sqrt(2/n[l-1])
+
+    parameter[f'b{l}']=np.zeros((n[l],1))
+  
+  return parameter
+
+
+# importing data
+def prepare_data():
+
+  data=np.genfromtxt("iris.csv", delimiter=",", dtype='str', skip_header=1) #import csv
+
+  x=data[:,:4].astype(float)
+  y=data[:,4]
+
+  classes=np.unique(y)
+  y_int=np.array([np.where(classes==label) [0][0] for label in y]) #encode labels into int
+
+  num_classes = len(classes)
+  y_onehot = np.eye(num_classes)[y_int] #one hot encoding
+
+  x_mean=x.mean(axis=0)
+  x_std=x.std(axis=0)
+  x_scaled=(x-x_mean)/x_std     #scaling and normalizing
+
+  x_scaled=x_scaled.T
+  y_onehot=y_onehot.T
+
+  return x_scaled, y_onehot, y_int
+
+
+# activation function
+def relu(Z):
+
+  return np.maximum(0,Z)
+  
+def relu_deri(Z):
+
+  return (Z>0).astype(float)
+  
+def softmax(Z):
+
+  Z_shifted=Z-np.max(Z, axis=0, keepdims=True)
+  Z_exp=np.exp(Z_shifted)
+  return Z_exp/np.sum(Z_exp, axis=0, keepdims=True)
+
+
+
+# feed forward process
+def feed_forward(x_scaled, parameter):
+  
+  L= len(parameter)//2 +1
+  A=x_scaled
+  cache={}
+  cache["A0"]= x_scaled
+
+  for l in range(1,L-1):
+    Z=parameter[f"W{l}"] @ A + parameter[f"b{l}"]
+    A=relu(Z)
+    cache[f'Z{l}']=Z
+    cache[f'A{l}']=A
+  
+  ZL=parameter[f"W{L-1}"] @ A + parameter[f"b{L-1}"]
+  AL=softmax(ZL)
+  cache[f"Z{L-1}"]=ZL
+  cache[f"A{L-1}"]=AL
+  
+  return AL,cache
+  
+
+#cost
+def cost(AL, y_onehot):
+  
+  m= y_onehot.shape[1]
+
+  epsilon=1e-15
+  AL=np.clip(AL, epsilon, 1-epsilon)
+
+  loss=-np.sum(y_onehot * np.log(AL))/m
+
+  return loss
+
+
+
+#backpropagation
+def backpropagation(AL, y_onehot, cache, parameter):
+  L= len(cache)//2 
+  grad={}
+  m=y_onehot.shape[1]
+  
+  dZL=AL-y_onehot
+
+  A_prev = cache[f"A{L-1}"]
+
+  grad["dW" + str(L)] = (1/m) * (dZL @ A_prev.T)
+  grad["db" + str(L)] = (1/m) * np.sum(dZL, axis=1, keepdims=True)
+
+  dA_prev=parameter[f"W{L}"].T @ dZL
+
+  for l in reversed(range(1,L)):
+    Zl = cache[f'Z{l}']
+    
+    dZ = dA_prev * relu_deri(Zl)
+
+    A_prev=cache[f"A{l-1}"]
+    
+    grad["dW" + str(l)] = (1/m) * (dZ @ A_prev.T)
+    grad["db" + str(l)] = (1/m) * np.sum(dZ, axis=1, keepdims=True)
+
+    if l>1:
+      dA_prev=parameter["W"+str(l)].T @ dZ
+
+  return grad
+
+
+def update_para(parameter, grad, alpha):
+  L = len(parameter) // 2
+
+  for l in range(1, L + 1):
+    parameter[f"W{l}"] -= alpha * grad[f"dW{l}"]
+    parameter[f"b{l}"] -= alpha * grad[f"db{l}"]
+
+  return parameter
+
+
+#training and calling the functions
+
+def train(x_scaled, y_onehot, alpha=0.1, epochs=1000, interval=20):
+ 
+  parameter=he_initialization(n)
+
+  costs = [] 
+
+  for e in range(epochs):
+   
+    AL, cache = feed_forward(x_scaled, parameter)
+
+    loss=cost(AL, y_onehot)
+    costs.append(loss)
+
+    grad=backpropagation(AL, y_onehot, cache, parameter)
+
+    parameter=update_para(parameter, grad, alpha)
+    
+    if e % interval == 0:
+      print(f"epoch {e}: cost = {loss:4f}")     #print errors after every 20 epochs
+    
+  plt.plot(range(epochs), costs)  #ploting a graph
+  plt.xlabel("epochs")
+  plt.ylabel("cost")
+  plt.title("error")
+
+  return parameter, costs
+
+
+def predict(parameter, x_scaled):
+
+  AL, _ = feed_forward(x_scaled, parameter)
+
+  return np.argmax(AL, axis=0) 
+
+
+def accuracy(parameter, x_scaled, y_int):
+
+  pred=predict(parameter, x_scaled)
+  
+  return np.mean(pred==y_int)
+
+
+def draw_nn(layers):
+  G = nx.DiGraph()
+  pos = {}
+  node_count = 0
+    
+  for i, layer_size in enumerate(layers):
+    for j in range(layer_size):
+      G.add_node(node_count)
+      pos[node_count] = (i, -j)
+      node_count += 1
+    
+  prev_count = 0
+  for i in range(len(layers) - 1):
+    for a in range(layers[i]):
+      for b in range(layers[i+1]):
+        G.add_edge(prev_count + a, prev_count + layers[i] + b)
+    prev_count += layers[i]
+
+  nx.draw(G, pos, with_labels=False, node_size=800, node_color="skyblue", edge_color="gray")
+  plt.show()
+
+
+
+#main
+x_scaled, y_onehot, y_int=prepare_data()
+
+parameter, costs= train(x_scaled, y_onehot)
+
+prediction=predict(parameter, x_scaled)
+
+acc=accuracy(parameter, x_scaled, y_int)
+
+print("accuracy is :", acc)
+
+plt.show()
+
+draw_nn(n)
